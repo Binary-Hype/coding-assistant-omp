@@ -10,10 +10,6 @@ This repository is OMP-specific. Keep it free of non-OMP runtime files, non-OMP 
 - `coding-assistant/skills/**` contains shared skills with OMP tool names and OMP skill invocation wording.
 - `coding-assistant/hooks/pre/core-safety.ts` is the OMP pre-tool-call safety extension.
 - `coding-assistant/hooks/config/default-denylist.json` is loaded by the safety extension.
-- `octo-pi/package.json` contains package metadata plus the `omp.extensions` list.
-- `octo-pi/plugin.json` is the OMP plugin manifest.
-- `octo-pi/src/**` contains the OMP command and tool extension runtime.
-- `octo-pi/tests/**` contains the plugin behavior tests.
 - `tests/**` contains marketplace-level Bats metadata tests that validate all cataloged plugins.
 
 ## Versioning
@@ -51,10 +47,3 @@ From `coding-assistant`, run:
 bun test tests/test-core-safety.test.ts
 ```
 
-From `octo-pi`, run:
-
-```bash
-bun install --frozen-lockfile # only if dependencies are missing
-bun test
-bun run typecheck
-```

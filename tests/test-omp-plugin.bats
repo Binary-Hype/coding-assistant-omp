@@ -16,7 +16,7 @@ teardown() {
     const path = require("path");
     const root = process.argv[1];
     const catalog = JSON.parse(fs.readFileSync(path.join(root, ".claude-plugin/marketplace.json"), "utf8"));
-    const expected = ["coding-assistant", "octo-pi"];
+    const expected = ["coding-assistant"];
     if (catalog.name !== "binary-hype-omp") throw new Error(`unexpected catalog name: ${catalog.name}`);
     if (!Array.isArray(catalog.plugins)) throw new Error("catalog.plugins must be an array");
     const actual = catalog.plugins.map((entry) => entry.name);
@@ -34,7 +34,6 @@ teardown() {
     const repository = "https://github.com/Binary-Hype/omp-marketplace";
     const expected = new Map([
       ["coding-assistant", { source: "./coding-assistant", version: "1.0.0" }],
-      ["octo-pi", { source: "./octo-pi", version: "1.0.2" }],
     ]);
     const catalog = JSON.parse(fs.readFileSync(path.join(root, ".claude-plugin/marketplace.json"), "utf8"));
 
@@ -73,7 +72,6 @@ teardown() {
     const root = process.argv[1];
     const expectedExtensions = new Map([
       ["coding-assistant", ["./hooks/pre/core-safety.ts"]],
-      ["octo-pi", ["./src/main.ts"]],
     ]);
     const catalog = JSON.parse(fs.readFileSync(path.join(root, ".claude-plugin/marketplace.json"), "utf8"));
 

@@ -8,7 +8,6 @@ Install the marketplace once, then install the plugins you need:
 ```bash
 omp marketplace add Binary-Hype/omp-marketplace
 omp install coding-assistant@binary-hype-omp
-omp install octo-pi@binary-hype-omp
 ```
 
 ## Included plugins
@@ -34,22 +33,6 @@ Plugin surfaces:
 
 The safety hook blocks access to configured secret files, prevents commits with staged credential-looking content, blocks unsafe `op` CLI commands, and rejects `write` payloads larger than 800 lines.
 
-### octo-pi
-
-Multi-model OMP workflows for debate, brainstorming, and sourced research.
-
-Plugin surfaces:
-
-- Commands:
-  - `/debate`
-  - `/brainstorm`
-  - `/research`
-- Tools:
-  - `octopus_multi_model_round`
-  - `octopus_research_round`
-  - `octopus_next_step`
-
-See `octo-pi/README.md` for detailed usage.
 
 ## Safety configuration
 
