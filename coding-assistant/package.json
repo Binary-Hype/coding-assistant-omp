@@ -1,6 +1,6 @@
 {
   "name": "coding-assistant",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Lean coding assistant focused on code quality, security, correctness, and destructive bash approval.",
   "license": "GPL-3.0",
   "private": true,

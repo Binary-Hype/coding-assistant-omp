@@ -9,8 +9,8 @@
     {
       "name": "coding-assistant",
       "source": "./coding-assistant",
-      "description": "An OMP coding assistant focused on code quality, security, and correctness. Provides production-minded skills plus a pre-tool-call safety hook for secret file access, credential commits, unsafe 1Password CLI usage, oversized write payloads, and destructive bash approval.",
-      "version": "1.1.0",
+      "description": "Lean OMP coding assistant with focused skills and a pre-tool-call safety hook for secret access, credential commits, unsafe 1Password CLI usage, oversized writes, and destructive bash approval.",
+      "version": "1.1.1",
       "author": {
         "name": "Tobias Kokesch",
         "email": "hallo@binary-hype.com"
@@ -22,19 +22,9 @@
         "skills",
         "code-quality",
         "code-review",
-        "refactoring",
-        "testing",
-        "api-design",
         "security",
         "git",
         "database",
-        "php",
-        "laravel",
-        "shopware",
-        "javascript",
-        "dependencies",
-        "vulnerability-scanning",
-        "pull-request",
         "merge-conflict",
         "humanizer",
         "promote-prs"
