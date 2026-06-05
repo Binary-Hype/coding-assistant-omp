@@ -40,9 +40,42 @@ interface HookAPI {
   ): void;
 }
 
+interface BashConfig {
+  disabledRuleIds: string[];
+  approvalRuleIds?: string[];
+  blockedRuleIds: string[];
+}
+
 interface PatternConfig {
   deny: string[];
   allow: string[];
+  bash?: BashConfig;
+}
+
+type BashSeverity = "allow" | "approve" | "block";
+
+interface BashRuleMatch {
+  id: string;
+  severity: BashSeverity;
+  summary: string;
+  consequence: string;
+}
+
+interface BashAnalysis {
+  severity: BashSeverity;
+  matches: BashRuleMatch[];
+  normalizedCommand: string;
+}
+
+interface ShellToken {
+  value: string;
+  quoted: boolean;
+  operator: boolean;
+}
+
+interface ShellLexResult {
+  tokens: ShellToken[];
+  errors: string[];
 }
 
 interface OpAnalysis {
@@ -100,15 +133,29 @@ function stringsFromUnknown(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string");
 }
 
+function bashConfigFromUnknown(value: unknown): BashConfig | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const obj = value as { disabledRuleIds?: unknown; approvalRuleIds?: unknown; blockedRuleIds?: unknown };
+  const approvalRuleIds = Array.isArray(obj.approvalRuleIds)
+    ? stringsFromUnknown(obj.approvalRuleIds)
+    : undefined;
+  return {
+    disabledRuleIds: stringsFromUnknown(obj.disabledRuleIds),
+    approvalRuleIds,
+    blockedRuleIds: stringsFromUnknown(obj.blockedRuleIds),
+  };
+}
+
 function parsePatternConfig(value: unknown): PatternConfig | undefined {
   if (Array.isArray(value)) {
     return { deny: stringsFromUnknown(value), allow: [] };
   }
   if (value && typeof value === "object") {
-    const obj = value as { deny?: unknown; allow?: unknown };
+    const obj = value as { deny?: unknown; allow?: unknown; bash?: unknown };
     return {
       deny: stringsFromUnknown(obj.deny),
       allow: stringsFromUnknown(obj.allow),
+      bash: bashConfigFromUnknown(obj.bash),
     };
   }
   return undefined;
@@ -136,16 +183,29 @@ function loadJsonArray(filePath: string): string[] {
   }
 }
 
+function mergeBashConfig(target: BashConfig, source: BashConfig | undefined): void {
+  if (!source) return;
+  target.disabledRuleIds.push(...source.disabledRuleIds);
+  target.blockedRuleIds.push(...source.blockedRuleIds);
+  if (source.approvalRuleIds) {
+    target.approvalRuleIds = [
+      ...(target.approvalRuleIds ?? []),
+      ...source.approvalRuleIds,
+    ];
+  }
+}
+
 function loadPatterns(): PatternConfig {
   const deny = new Set<string>(DEFAULT_DENY);
   const allow = new Set<string>(DEFAULT_ALLOW);
-
+  const bash: BashConfig = { disabledRuleIds: [], blockedRuleIds: [] };
   const defaultConfig = loadPatternConfig(
     path.join(pluginRoot(), "hooks", "config", "default-denylist.json")
   );
   if (defaultConfig) {
     addPatterns(deny, defaultConfig.deny);
     addPatterns(allow, defaultConfig.allow);
+    mergeBashConfig(bash, defaultConfig.bash);
   }
 
   const globalConfig = loadPatternConfig(
@@ -154,6 +214,7 @@ function loadPatterns(): PatternConfig {
   if (globalConfig) {
     addPatterns(deny, globalConfig.deny);
     addPatterns(allow, globalConfig.allow);
+    mergeBashConfig(bash, globalConfig.bash);
   }
 
   const projectConfig = loadPatternConfig(
@@ -162,13 +223,14 @@ function loadPatterns(): PatternConfig {
   if (projectConfig) {
     addPatterns(deny, projectConfig.deny);
     addPatterns(allow, projectConfig.allow);
+    mergeBashConfig(bash, projectConfig.bash);
   }
 
   const cacheDir = getCacheDir();
   addPatterns(deny, loadJsonArray(path.join(cacheDir, "deny-patterns.json")));
   addPatterns(allow, loadJsonArray(path.join(cacheDir, "allow-patterns.json")));
 
-  return { deny: [...deny], allow: [...allow] };
+  return { deny: [...deny], allow: [...allow], bash };
 }
 
 function loadOverrides(): { deny: Set<string>; allow: Set<string> } {
@@ -214,50 +276,240 @@ function isPathDenied(
   return false;
 }
 
-function shellTokenize(s: string): string[] {
-  const tokens: string[] = [];
+const SHELL_OPERATORS = new Set([";", "&&", "||", "|", "&", ">", ">>", "<", "<<"]);
+
+function pushShellToken(tokens: ShellToken[], value: string, quoted: boolean): void {
+  if (value) tokens.push({ value, quoted, operator: false });
+}
+
+function lexShell(command: string): ShellLexResult {
+  const tokens: ShellToken[] = [];
+  const errors: string[] = [];
+  const input = command.replace(/\\\r?\n/g, " ");
   let current = "";
+  let quotedToken = false;
   let quote: "'" | '"' | null = null;
 
-  for (let i = 0; i < s.length; i++) {
-    const c = s[i];
+  for (let i = 0; i < input.length; i++) {
+    const c = input[i];
+    const next = input[i + 1] ?? "";
+
     if (quote) {
       if (c === quote) quote = null;
+      else if (quote === '"' && c === "\\" && i + 1 < input.length) current += input[++i];
       else current += c;
-    } else if (c === "'" || c === '"') {
-      quote = c;
-    } else if (c === "\\" && i + 1 < s.length) {
-      current += s[++i];
-    } else if (/\s/.test(c)) {
-      if (current) {
-        tokens.push(current);
-        current = "";
-      }
-    } else {
-      current += c;
+      continue;
     }
+
+    if (c === "#") break;
+    if (c === "$" && next === "(") errors.push("subshell-execution");
+    if (c === "`") errors.push("subshell-execution");
+    if ((c === "<" || c === ">") && next === "(") errors.push("subshell-execution");
+    if (c === "'" || c === '"') {
+      quote = c;
+      quotedToken = true;
+      continue;
+    }
+    if (c === "\\" && i + 1 < input.length) {
+      current += input[++i];
+      continue;
+    }
+    if (/\s/.test(c)) {
+      pushShellToken(tokens, current, quotedToken);
+      current = "";
+      quotedToken = false;
+      continue;
+    }
+    const two = c + next;
+    if (SHELL_OPERATORS.has(two)) {
+      pushShellToken(tokens, current, quotedToken);
+      current = "";
+      quotedToken = false;
+      tokens.push({ value: two, quoted: false, operator: true });
+      if (two === "<<") errors.push("heredoc-execution");
+      i++;
+      continue;
+    }
+    if (SHELL_OPERATORS.has(c)) {
+      pushShellToken(tokens, current, quotedToken);
+      current = "";
+      quotedToken = false;
+      tokens.push({ value: c, quoted: false, operator: true });
+      continue;
+    }
+    current += c;
   }
 
-  if (current) tokens.push(current);
-  return tokens;
+  if (quote) errors.push("parse-error");
+  pushShellToken(tokens, current, quotedToken);
+  return { tokens, errors };
+}
+
+function shellTokenize(s: string): string[] {
+  return lexShell(s).tokens.filter((token) => !token.operator).map((token) => token.value);
+}
+
+function commandName(token: string): string {
+  return path.basename(token);
+}
+
+function isAssignmentToken(token: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*=.*/.test(token);
 }
 
 function extractBashFilePaths(command: string): string[] {
   const paths: string[] = [];
-  const tokens = shellTokenize(command);
+  const { tokens } = lexShell(command);
   const fileCommands = new Set([
     "cat", "head", "tail", "less", "more", "grep", "sed", "awk",
-    "source", "cp", "mv", "rm", "touch",
+    "source", ".", "cp", "mv", "rm", "touch",
   ]);
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
-    if (!fileCommands.has(token) || i + 1 >= tokens.length) continue;
-    const candidate = tokens[i + 1].replace(/^[<>]+/, "");
-    if (candidate && !candidate.startsWith("-")) paths.push(candidate);
+    if (token.operator || !fileCommands.has(commandName(token.value))) continue;
+    for (let j = i + 1; j < tokens.length && !tokens[j].operator; j++) {
+      const candidate = tokens[j].value.replace(/^[<>]+/, "");
+      if (candidate && !candidate.startsWith("-")) paths.push(candidate);
+    }
   }
 
   return paths;
+}
+const BASH_RULES: Record<string, Omit<BashRuleMatch, "severity">> = {
+  "recursive-delete": { id: "recursive-delete", summary: "Recursive rm operation", consequence: "May delete directories and their contents." },
+  "force-delete": { id: "force-delete", summary: "Forced rm operation", consequence: "May remove files without prompts or recovery path." },
+  "root-or-home-delete": { id: "root-or-home-delete", summary: "Broad rm target", consequence: "May remove the current tree, parent tree, home directory, or filesystem root." },
+  "destructive-glob": { id: "destructive-glob", summary: "Unquoted destructive glob", consequence: "Shell expansion may affect more files than intended." },
+  "shell-command-chain": { id: "shell-command-chain", summary: "Destructive command in shell chain", consequence: "Earlier commands or pipelines can change what is deleted or modified." },
+  "subshell-execution": { id: "subshell-execution", summary: "Subshell or process substitution", consequence: "Nested shell execution cannot be safely classified." },
+  "heredoc-execution": { id: "heredoc-execution", summary: "Heredoc shell input", consequence: "Multiline shell input cannot be safely classified." },
+  "interpreter-eval": { id: "interpreter-eval", summary: "Interpreter eval execution", consequence: "Inline code can run destructive shell commands." },
+  "source-script": { id: "source-script", summary: "Sourced script execution", consequence: "A sourced script can mutate the current shell and run arbitrary commands." },
+  "git-clean": { id: "git-clean", summary: "Git clean removes untracked files", consequence: "Untracked files may be deleted permanently." },
+  "git-reset-hard": { id: "git-reset-hard", summary: "Hard git reset", consequence: "Tracked changes may be discarded." },
+  "git-broad-restore": { id: "git-broad-restore", summary: "Broad git restore", consequence: "Workspace changes may be discarded." },
+  "find-delete": { id: "find-delete", summary: "Find delete action", consequence: "Matched files are deleted during traversal." },
+  "find-exec": { id: "find-exec", summary: "Find executes rm", consequence: "Matched files are passed to rm." },
+  "recursive-permission-change": { id: "recursive-permission-change", summary: "Recursive permission or ownership change", consequence: "Permissions or ownership can be changed across an entire tree." },
+  "disk-destructive-command": { id: "disk-destructive-command", summary: "Disk/container/infrastructure destructive command", consequence: "Data, containers, or infrastructure resources may be destroyed." },
+  "network-pipe-to-shell": { id: "network-pipe-to-shell", summary: "Network response piped to shell", consequence: "Remote content will execute as code." },
+  "parse-error": { id: "parse-error", summary: "Shell parse ambiguity", consequence: "The hook cannot safely classify this command." },
+};
+
+function rule(id: string, config: BashConfig | undefined): BashRuleMatch | undefined {
+  if (config?.disabledRuleIds.includes(id)) return undefined;
+  if (config?.approvalRuleIds && !config.approvalRuleIds.includes(id)) return undefined;
+  const base = BASH_RULES[id];
+  if (!base) return undefined;
+  return {
+    ...base,
+    severity: config?.blockedRuleIds.includes(id) ? "block" : "approve",
+  };
+}
+
+function addRule(matches: BashRuleMatch[], seen: Set<string>, id: string, config: BashConfig | undefined): void {
+  if (seen.has(id)) return;
+  const match = rule(id, config);
+  if (!match) return;
+  seen.add(id);
+  matches.push(match);
+}
+
+function hasRmFlag(args: ShellToken[], names: string[]): boolean {
+  return args.some((arg) => {
+    const value = arg.value;
+    if (names.includes(value)) return true;
+    if (!value.startsWith("-") || value.startsWith("--")) return false;
+    return names.some((name) => name.length === 2 && value.slice(1).includes(name[1]));
+  });
+}
+
+function hasUnquotedGlob(token: ShellToken): boolean {
+  return !token.quoted && /[*?\[]/.test(token.value);
+}
+
+function isBroadTarget(value: string): boolean {
+  return value === "/" || value === "~" || value === "$HOME" || value === "." || value === "..";
+}
+
+function segments(tokens: ShellToken[]): ShellToken[][] {
+  const result: ShellToken[][] = [];
+  let current: ShellToken[] = [];
+  for (const token of tokens) {
+    if (token.operator && [";", "&&", "||", "|", "&"].includes(token.value)) {
+      if (current.length) result.push(current);
+      current = [];
+    } else {
+      current.push(token);
+    }
+  }
+  if (current.length) result.push(current);
+  return result;
+}
+
+function firstCommandIndex(tokens: ShellToken[]): number {
+  let i = 0;
+  while (i < tokens.length && !tokens[i].operator && isAssignmentToken(tokens[i].value)) i++;
+  if (["env", "command"].includes(commandName(tokens[i]?.value ?? ""))) i++;
+  return i;
+}
+
+function analyzeSegment(tokens: ShellToken[], matches: BashRuleMatch[], seen: Set<string>, config: BashConfig | undefined, chained: boolean): void {
+  const cmdIndex = firstCommandIndex(tokens);
+  if (cmdIndex >= tokens.length) return;
+  const cmd = commandName(tokens[cmdIndex].value);
+  const args = tokens.slice(cmdIndex + 1).filter((token) => !token.operator);
+
+  if (["bash", "sh", "zsh"].includes(cmd) && args.some((arg) => arg.value === "-c")) addRule(matches, seen, "interpreter-eval", config);
+  if ((["python", "node", "ruby", "perl", "bun"].includes(cmd) && args.some((arg) => arg.value === "-c" || arg.value === "-e")) || (cmd === "php" && args.some((arg) => arg.value === "-r")) || (cmd === "deno" && args.some((arg) => arg.value === "eval"))) addRule(matches, seen, "interpreter-eval", config);
+  if (cmd === "source" || cmd === ".") addRule(matches, seen, "source-script", config);
+
+  if (cmd === "rm" || (cmd === "xargs" && args.some((arg) => commandName(arg.value) === "rm"))) {
+    const rmArgs = cmd === "rm" ? args : args.slice(args.findIndex((arg) => commandName(arg.value) === "rm") + 1);
+    const recursive = hasRmFlag(rmArgs, ["-r", "-R", "--recursive"]);
+    const force = hasRmFlag(rmArgs, ["-f", "--force"]);
+    if (recursive) addRule(matches, seen, "recursive-delete", config);
+    if (force) addRule(matches, seen, "force-delete", config);
+    if (rmArgs.some((arg) => !arg.value.startsWith("-") && isBroadTarget(arg.value))) addRule(matches, seen, "root-or-home-delete", config);
+    if (rmArgs.some((arg) => !arg.value.startsWith("-") && hasUnquotedGlob(arg))) addRule(matches, seen, "destructive-glob", config);
+    if (chained && (recursive || force || rmArgs.some(hasUnquotedGlob))) addRule(matches, seen, "shell-command-chain", config);
+  }
+
+  if (cmd === "git" && args[0]?.value === "clean" && args.some((arg) => /^-[A-Za-z]*f[A-Za-z]*d|^-[A-Za-z]*d[A-Za-z]*f/.test(arg.value))) addRule(matches, seen, "git-clean", config);
+  if (cmd === "git" && args[0]?.value === "reset" && args.some((arg) => arg.value === "--hard")) addRule(matches, seen, "git-reset-hard", config);
+  if (cmd === "git" && ((args[0]?.value === "checkout" && args[1]?.value === "--" && args[2]?.value === ".") || (args[0]?.value === "restore" && args.some((arg) => arg.value === ".")))) addRule(matches, seen, "git-broad-restore", config);
+  if (cmd === "find" && args.some((arg) => arg.value === "-delete")) addRule(matches, seen, "find-delete", config);
+  if (cmd === "find" && args.some((arg, index) => (arg.value === "-exec" || arg.value === "-execdir") && commandName(args[index + 1]?.value ?? "") === "rm")) addRule(matches, seen, "find-exec", config);
+  if ((cmd === "chmod" || cmd === "chown") && hasRmFlag(args, ["-R", "--recursive"])) addRule(matches, seen, "recursive-permission-change", config);
+  if (cmd === "dd" && args.some((arg) => arg.value.startsWith("of="))) addRule(matches, seen, "disk-destructive-command", config);
+  if (cmd.startsWith("mkfs") || (cmd === "diskutil" && args[0]?.value?.startsWith("erase")) || (cmd === "docker" && ((args[0]?.value === "system" && args[1]?.value === "prune") || (args[0]?.value === "volume" && args[1]?.value === "rm") || (args[0]?.value === "rm" && args.some((arg) => arg.value === "-f")))) || (cmd === "kubectl" && args[0]?.value === "delete") || (cmd === "helm" && args[0]?.value === "uninstall") || (cmd === "terraform" && args[0]?.value === "destroy")) addRule(matches, seen, "disk-destructive-command", config);
+}
+
+function analyzeBashCommand(command: string, config?: BashConfig): BashAnalysis {
+  const lexed = lexShell(command);
+  const matches: BashRuleMatch[] = [];
+  const seen = new Set<string>();
+  for (const error of lexed.errors) addRule(matches, seen, error, config);
+
+  const parts = segments(lexed.tokens);
+  const chained = parts.length > 1 || lexed.tokens.some((token) => token.operator && token.value === "|");
+  for (const part of parts) analyzeSegment(part, matches, seen, config, chained);
+
+  for (let i = 0; i < parts.length - 1; i++) {
+    const left = commandName(parts[i][firstCommandIndex(parts[i])]?.value ?? "");
+    const right = commandName(parts[i + 1][firstCommandIndex(parts[i + 1])]?.value ?? "");
+    if ((left === "curl" || left === "wget") && (right === "sh" || right === "bash")) addRule(matches, seen, "network-pipe-to-shell", config);
+  }
+
+  const severity: BashSeverity = matches.some((match) => match.severity === "block")
+    ? "block"
+    : matches.length ? "approve" : "allow";
+  return {
+    severity,
+    matches,
+    normalizedCommand: lexed.tokens.map((token) => token.value).join(" "),
+  };
 }
 
 function checkSecretProtection(event: ToolCallEvent): BlockResult | undefined {
@@ -550,8 +802,57 @@ function checkLargeFile(event: ToolCallEvent): BlockResult | undefined {
   return undefined;
 }
 
+function formatBashApproval(command: string, analysis: BashAnalysis): string {
+  const rules = analysis.matches.map((match) => `- ${match.id}: ${match.summary}\n  Consequence: ${match.consequence}`).join("\n");
+  return [
+    "Exact command:",
+    command,
+    "",
+    "Matched rules:",
+    rules,
+    "",
+    "Undo status: Not guaranteed recoverable",
+    "Source: bash tool call",
+  ].join("\n");
+}
+
+async function checkDangerousBash(event: ToolCallEvent, ctx: HookContext): Promise<BlockResult | undefined> {
+  if (tool(event) !== "bash") return undefined;
+  const command = inputString(event.input, ["command"]);
+  if (!command) return undefined;
+
+  const config = loadPatterns().bash;
+  const analysis = analyzeBashCommand(command, config);
+  if (analysis.severity === "allow") return undefined;
+
+  const details = formatBashApproval(command, analysis);
+  if (analysis.severity === "block") {
+    return {
+      block: true,
+      reason: `[Hook] BLOCKED: Dangerous bash command matched blocked rule(s): ${analysis.matches.map((match) => match.id).join(", ")}.\n${details}`,
+    };
+  }
+
+  if (!ctx.ui?.confirm) {
+    return {
+      block: true,
+      reason: `[Hook] APPROVAL REQUIRED: Dangerous bash command requires user approval.\n${details}`,
+    };
+  }
+
+  const approved = await ctx.ui.confirm("Dangerous bash command requires approval", details);
+  if (!approved) {
+    return {
+      block: true,
+      reason: "[Hook] BLOCKED: User denied dangerous bash command.",
+    };
+  }
+
+  return undefined;
+}
+
 export default function register(api: HookAPI): void {
-  api.on("tool_call", async (event) => {
+  api.on("tool_call", async (event, ctx) => {
     const checks = [
       checkSecretProtection,
       checkCredentialGate,
@@ -564,6 +865,6 @@ export default function register(api: HookAPI): void {
       if (result) return result;
     }
 
-    return undefined;
+    return checkDangerousBash(event, ctx);
   });
 }

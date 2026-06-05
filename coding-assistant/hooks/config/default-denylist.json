@@ -16,5 +16,9 @@
   "allow": [
     ".env.example", ".env.dist", ".env.template",
     "*.pem.example", "*.key.example"
-  ]
+  ],
+  "bash": {
+    "disabledRuleIds": [],
+    "blockedRuleIds": []
+  }
 }

@@ -33,7 +33,7 @@ teardown() {
     const root = process.argv[1];
     const repository = "https://github.com/Binary-Hype/omp-marketplace";
     const expected = new Map([
-      ["coding-assistant", { source: "./coding-assistant", version: "1.0.0" }],
+      ["coding-assistant", { source: "./coding-assistant", version: "1.1.0" }],
     ]);
     const catalog = JSON.parse(fs.readFileSync(path.join(root, ".claude-plugin/marketplace.json"), "utf8"));
 

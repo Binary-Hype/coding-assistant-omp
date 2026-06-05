@@ -1,7 +1,7 @@
 {
   "name": "coding-assistant",
-  "version": "1.0.0",
-  "description": "Lean OMP coding assistant focused on code quality, security, and correctness. Skills cover API design, testing, database review, dependency health, merge-conflict resolution, humanized writing, PR promotion, and commit messages. The OMP pre-hook guards against secret file access, credential commits, unsafe 1Password CLI usage, and oversized write payloads.",
+  "version": "1.1.0",
+  "description": "Lean OMP coding assistant focused on code quality, security, and correctness. Skills cover API design, testing, database review, dependency health, merge-conflict resolution, humanized writing, PR promotion, and commit messages. The OMP pre-hook guards against secret file access, credential commits, unsafe 1Password CLI usage, oversized write payloads, and destructive bash commands that require approval.",
   "author": {
     "name": "Tobias Kokesch",
     "email": "hallo@binary-hype.com"

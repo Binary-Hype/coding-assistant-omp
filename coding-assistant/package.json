@@ -1,7 +1,7 @@
 {
   "name": "coding-assistant",
-  "version": "1.0.0",
-  "description": "Lean coding assistant focused on code quality, security, and correctness.",
+  "version": "1.1.0",
+  "description": "Lean coding assistant focused on code quality, security, correctness, and destructive bash approval.",
   "license": "GPL-3.0",
   "private": true,
   "keywords": [
@@ -18,7 +18,7 @@
   ],
   "omp": {
     "name": "coding-assistant",
-    "description": "Lean coding assistant focused on code quality, security, and correctness.",
+    "description": "Lean coding assistant focused on code quality, security, correctness, and destructive bash approval.",
     "extensions": [
       "./hooks/pre/core-safety.ts"
     ]
