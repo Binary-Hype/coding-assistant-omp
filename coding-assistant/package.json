@@ -1,7 +1,7 @@
 {
   "name": "coding-assistant",
-  "version": "1.1.1",
-  "description": "Lean coding assistant focused on code quality, security, correctness, and destructive bash approval.",
+  "version": "1.2.0",
+  "description": "Lean OMP coding assistant skills for code quality, API design, database review, dependency auditing, merge conflict resolution, PR promotion, testing, and humanized writing.",
   "license": "GPL-3.0",
   "private": true,
   "keywords": [
@@ -18,15 +18,8 @@
   ],
   "omp": {
     "name": "coding-assistant",
-    "description": "Lean coding assistant focused on code quality, security, correctness, and destructive bash approval.",
-    "extensions": [
-      "./hooks/pre/core-safety.ts"
-    ]
+    "description": "Lean OMP coding assistant skills for code quality, API design, database review, dependency auditing, merge conflict resolution, PR promotion, testing, and humanized writing."
   },
   "homepage": "https://github.com/Binary-Hype/omp-marketplace",
-  "repository": "https://github.com/Binary-Hype/omp-marketplace",
-  "devDependencies": {
-    "@types/node": "^25.9.2",
-    "typescript": "^6.0.3"
-  }
+  "repository": "https://github.com/Binary-Hype/omp-marketplace"
 }

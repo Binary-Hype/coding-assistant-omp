@@ -33,7 +33,7 @@ teardown() {
     const root = process.argv[1];
     const repository = "https://github.com/Binary-Hype/omp-marketplace";
     const expected = new Map([
-      ["coding-assistant", { source: "./coding-assistant", version: "1.1.1" }],
+      ["coding-assistant", { source: "./coding-assistant", version: "1.2.0" }],
     ]);
     const catalog = JSON.parse(fs.readFileSync(path.join(root, ".claude-plugin/marketplace.json"), "utf8"));
 
@@ -65,26 +65,62 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
-@test "package OMP extension entrypoints exist for each plugin" {
+@test "plugin exposes only marketplace-loaded skills" {
   run node -e '
     const fs = require("fs");
     const path = require("path");
     const root = process.argv[1];
-    const expectedExtensions = new Map([
-      ["coding-assistant", ["./hooks/pre/core-safety.ts"]],
-    ]);
     const catalog = JSON.parse(fs.readFileSync(path.join(root, ".claude-plugin/marketplace.json"), "utf8"));
+    const entry = catalog.plugins.find((plugin) => plugin.name === "coding-assistant");
+    if (!entry) throw new Error("missing coding-assistant catalog entry");
 
-    for (const entry of catalog.plugins) {
-      const pluginRoot = path.join(root, entry.source);
-      const pkg = JSON.parse(fs.readFileSync(path.join(pluginRoot, "package.json"), "utf8"));
-      const expected = expectedExtensions.get(entry.name);
-      if (!expected) throw new Error(`unexpected plugin entry: ${entry.name}`);
-      if (JSON.stringify(pkg.omp?.extensions) !== JSON.stringify(expected)) throw new Error(`${entry.name}: unexpected omp.extensions ${JSON.stringify(pkg.omp?.extensions)}`);
-      for (const extension of pkg.omp.extensions) {
-        if (!extension.startsWith("./")) throw new Error(`${entry.name}: extension must be relative: ${extension}`);
-        if (!fs.existsSync(path.join(pluginRoot, extension))) throw new Error(`${entry.name}: missing extension ${extension}`);
-      }
+    const pluginRoot = path.join(root, entry.source);
+    const pkg = JSON.parse(fs.readFileSync(path.join(pluginRoot, "package.json"), "utf8"));
+    if (pkg.omp?.extensions !== undefined) throw new Error("coding-assistant: omp.extensions must be absent");
+
+    for (const removedPath of ["hooks", "tests", "tsconfig.json", "bun.lock"]) {
+      if (fs.existsSync(path.join(pluginRoot, removedPath))) throw new Error(`coding-assistant: removed artifact still exists: ${removedPath}`);
+    }
+
+    const expectedSkills = [
+      "api-design",
+      "commit-message",
+      "database-reviewer",
+      "dependency-auditor",
+      "grill-me",
+      "humanizer",
+      "merge-conflict-resolver",
+      "promote-prs",
+      "quality-check",
+      "test-generator",
+    ];
+    const skillsRoot = path.join(pluginRoot, "skills");
+    const actualSkills = fs.readdirSync(skillsRoot)
+      .filter((entryName) => fs.statSync(path.join(skillsRoot, entryName)).isDirectory())
+      .sort();
+    if (JSON.stringify(actualSkills) !== JSON.stringify(expectedSkills)) throw new Error(`coding-assistant: unexpected skills ${actualSkills.join(", ")}`);
+
+    for (const skill of expectedSkills) {
+      const skillFile = path.join(skillsRoot, skill, "SKILL.md");
+      if (!fs.existsSync(skillFile)) throw new Error(`coding-assistant: missing ${skill}/SKILL.md`);
+    }
+  ' "$REPO_ROOT"
+
+  [ "$status" -eq 0 ]
+}
+
+@test "README advertises only marketplace-loaded skills" {
+  run node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const root = process.argv[1];
+    const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
+
+    if (!readme.includes("OMP-specific marketplace for Binary Hype OMP skills.")) throw new Error("README missing skills-only opening sentence");
+    if (!readme.includes("Marketplace-loaded skills invoked as `/skill:<name>`:")) throw new Error("README missing marketplace-loaded skills heading");
+
+    for (const forbidden of ["core-safety", "safety hook", "Safety configuration", "denylist", "OMP_SECURITY_CACHE_DIR", "hooks/pre"]) {
+      if (readme.includes(forbidden)) throw new Error(`README still advertises removed safety extension text: ${forbidden}`);
     }
   ' "$REPO_ROOT"
 

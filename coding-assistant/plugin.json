@@ -1,7 +1,7 @@
 {
   "name": "coding-assistant",
-  "version": "1.1.1",
-  "description": "Lean OMP coding assistant with focused skills and a pre-hook for secret access, credential commits, unsafe 1Password CLI usage, oversized writes, and destructive bash approval.",
+  "version": "1.2.0",
+  "description": "Lean OMP coding assistant skills for code quality, API design, database review, dependency auditing, merge conflict resolution, PR promotion, testing, and humanized writing.",
   "author": {
     "name": "Tobias Kokesch",
     "email": "hallo@binary-hype.com"
