@@ -320,8 +320,5 @@ Your audit is successful when:
 ## Execution Mode
 
 - **Quick check** (single package manager): Execute these instructions directly in the main session
-- **Full audit** (Composer + npm, all checks): Delegate to a Task agent for context isolation:
-  ```
-  Task(subagent_type="general-purpose", model="sonnet", prompt="Follow the Dependency Auditor skill instructions to audit [scope]")
-  ```
-- **Cost-optimized**: Use `model="haiku"` for projects with few dependencies and standard stacks
+- **Full audit** (Composer + npm, all checks): Delegate via the OMP `task` subagent with a dependency-audit role for context isolation. Do not pin a provider or model.
+- **Small scope** (projects with few dependencies and standard stacks): Execute directly in the main session

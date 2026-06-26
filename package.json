@@ -3,7 +3,6 @@
   "version": "1.2.1",
   "description": "Lean OMP coding assistant skills for code quality, API design, database review, dependency auditing, merge conflict resolution, PR promotion, testing, and humanized writing.",
   "license": "GPL-3.0",
-  "private": true,
   "keywords": [
     "code-quality",
     "code-review",
@@ -15,6 +14,12 @@
     "merge-conflict",
     "humanizer",
     "promote-prs"
+  ],
+  "files": [
+    "plugin.json",
+    "skills",
+    "README.md",
+    "LICENSE"
   ],
   "omp": {
     "name": "coding-assistant",

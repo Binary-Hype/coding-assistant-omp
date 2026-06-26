@@ -318,8 +318,5 @@ MariaDB has some unique features worth considering:
 ## Execution Mode
 
 - **Quick check** (single query or migration): Execute these instructions directly in the main session
-- **Full review** (entire schema, all migrations, query audit): Delegate to a Task agent for context isolation:
-  ```
-  Task(subagent_type="general-purpose", model="sonnet", prompt="Follow the Database Reviewer skill instructions to review [scope]")
-  ```
-- **Cost-optimized**: Use `model="haiku"` for simple migration reviews or single-query optimization
+- **Full review** (entire schema, all migrations, query audit): Delegate via the OMP `task` subagent with a database-review role for context isolation. Do not pin a provider or model.
+- **Small scope** (simple migration reviews or single-query optimization): Execute directly in the main session

@@ -1,24 +1,29 @@
-# Binary Hype OMP Marketplace
+# Binary Hype coding-assistant OMP Plugin
 
-OMP-specific marketplace for Binary Hype OMP skills.
+Standalone OMP plugin for Binary Hype coding-assistant skills.
 
 ## Quick start
-Install the marketplace once, then install the plugins you need:
 
 ```bash
-omp marketplace add Binary-Hype/omp-marketplace
-omp install coding-assistant@binary-hype-omp
+# Git source
+omp install github:Binary-Hype/omp-marketplace
+
+# npm package, after publication
+omp install coding-assistant
+
+# Local/link development install; OMP symlinks and watches the directory
+omp install ./path/to/omp-marketplace
 ```
 
-## Included plugins
+## Skills
 
 ### coding-assistant
 
-A lean OMP coding assistant focused on code quality, security, and correctness through marketplace-loaded skills.
+A lean OMP coding assistant focused on code quality, security, and correctness through standalone plugin skills.
 
 Plugin surfaces:
 
-- Marketplace-loaded skills are invoked with singular `/skill:<name>` syntax:
+- Skills are invoked with singular `/skill:<name>` syntax:
   - `/skill:api-design`
   - `/skill:commit-message`
   - `/skill:database-reviewer`
